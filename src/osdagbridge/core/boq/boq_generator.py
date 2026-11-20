@@ -65,7 +65,26 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
         "bracing_diag_vol_total": "N.A.",
         "bracing_diag_wt_single": "N.A.",
         "bracing_diag_wt_total": "N.A.",
-        
+
+        # End diaphragms (one X-braced frame at each support)
+        "end_diaphragm_top_vol_formula": r"\placeholder{Area $\times$ Length}",
+        "end_diaphragm_top_qty": "N.A.",
+        "end_diaphragm_top_vol_total": "N.A.",
+        "end_diaphragm_top_wt_single": "N.A.",
+        "end_diaphragm_top_wt_total": "N.A.",
+
+        "end_diaphragm_bot_vol_formula": r"\placeholder{Area $\times$ Length}",
+        "end_diaphragm_bot_qty": "N.A.",
+        "end_diaphragm_bot_vol_total": "N.A.",
+        "end_diaphragm_bot_wt_single": "N.A.",
+        "end_diaphragm_bot_wt_total": "N.A.",
+
+        "end_diaphragm_diag_vol_formula": r"\placeholder{Area $\times$ Length}",
+        "end_diaphragm_diag_qty": "N.A.",
+        "end_diaphragm_diag_vol_total": "N.A.",
+        "end_diaphragm_diag_wt_single": "N.A.",
+        "end_diaphragm_diag_wt_total": "N.A.",
+
         "concrete_deck_vol_formula": r"\placeholder{Width $\times$ Thickness $\times$ Length}",
         "concrete_deck_qty": "N.A.",
         "concrete_deck_vol_total": "N.A.",
@@ -321,9 +340,32 @@ def calculate_material_quantities(inputs: dict, outputs: dict) -> dict:
             quantities["bracing_diag_vol_total"] = f"{diag_vol_total:.2f}"
             quantities["bracing_diag_wt_single"] = f"{diag_wt_single:.4f}"
             quantities["bracing_diag_wt_total"] = f"{diag_wt_total:.2f}"
+
+            # 5d. End diaphragms: one X-braced frame (top chord, bottom chord, 2 diagonals per
+            # girder bay) at each of the two supports. The report designs end diaphragms with the
+            # cross-bracing module and shows the same section as the cross bracing, so the same
+            # section area, bay width and diagonal length are used here.
+            n_ends = 2
+            ed_bays = n_girders - 1
+            ed_members = (
+                ("end_diaphragm_top", n_ends * ed_bays, bracing_area * spacing, spacing),
+                ("end_diaphragm_bot", n_ends * ed_bays, bracing_area * spacing, spacing),
+                ("end_diaphragm_diag", n_ends * ed_bays * 2, bracing_area * bracing_len, bracing_len),
+            )
+            for prefix, qty, vol_single, length in ed_members:
+                vol_total = qty * vol_single
+                quantities[f"{prefix}_vol_formula"] = (
+                    f"${bracing_area:.5f}\\text{{ m}}^2 \\times {length:.2f}\\text{{ m}} = "
+                    f"{vol_single:.5f}\\text{{ m}}^3$"
+                )
+                quantities[f"{prefix}_qty"] = str(qty)
+                quantities[f"{prefix}_vol_total"] = f"{vol_total:.2f}"
+                quantities[f"{prefix}_wt_single"] = f"{vol_single * 7.85:.4f}"
+                quantities[f"{prefix}_wt_total"] = f"{vol_total * 7.85:.2f}"
         else:
             # Keep all bracing volumes, quantities, and weights as default placeholder "N.A."
-            for prefix in ("bracing_top", "bracing_bot", "bracing_diag"):
+            for prefix in ("bracing_top", "bracing_bot", "bracing_diag",
+                           "end_diaphragm_top", "end_diaphragm_bot", "end_diaphragm_diag"):
                 quantities[f"{prefix}_vol_formula"] = "N.A."
                 quantities[f"{prefix}_qty"] = "N.A."
                 quantities[f"{prefix}_vol_total"] = "N.A."

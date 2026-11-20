@@ -144,9 +144,18 @@ def ur_chart_tex(rows_tex):
 # --------------------------------------------------------------------------
 # Chapter 7 - quantity charts
 # --------------------------------------------------------------------------
-def _sum_keys(input_dict, pattern):
-    rx = re.compile(pattern, re.I)
-    vals = [_num(v) for k, v in input_dict.items() if rx.search(str(k))]
+def _member_weight(input_dict, prefix):
+    """Total weight (MT) of one member family. Uses weight-per-member x quantity (4 decimals)
+    rather than the rounded 'total' column, so very light members are not rounded to zero."""
+    single = _num(input_dict.get(prefix + "_wt_single"))
+    qty = _num(input_dict.get(prefix + "_qty"))
+    if single is not None and qty is not None:
+        return single * qty
+    return _num(input_dict.get(prefix + "_wt_total"))
+
+
+def _sum_members(input_dict, prefixes):
+    vals = [_member_weight(input_dict, p) for p in prefixes]
     vals = [v for v in vals if v is not None]
     return sum(vals) if vals else None
 
@@ -165,8 +174,8 @@ def quantity_charts_tex(input_dict):
 
     # --- steel tonnage -------------------------------------------------------
     girders = _num(input_dict.get("steel_girders_wt_total"))
-    bracing = _sum_keys(input_dict, r"^bracing_(top|bot|diag)_wt_total$")
-    diaph = _sum_keys(input_dict, r"^end_?diaphragm.*wt_total$")
+    bracing = _sum_members(input_dict, ("bracing_top", "bracing_bot", "bracing_diag"))
+    diaph = _sum_members(input_dict, ("end_diaphragm_top", "end_diaphragm_bot", "end_diaphragm_diag"))
     items = [("Plate girders", girders), ("Cross bracing", bracing), ("End diaphragms", diaph)]
     shown = [(n, v) for n, v in items if v is not None]
     if shown:
@@ -205,9 +214,6 @@ def quantity_charts_tex(input_dict):
             ax.text(bar.get_x() + bar.get_width() / 2, val * 1.02, f"{_label(val)} {unit}", ha="center", va="bottom",
                     fontweight="bold")
             _style_axes(ax)
-        if conc > 0:
-            fig.suptitle(f"Reinforcement intensity: {rebar * 1000.0 / conc:.0f} kg per m$^3$ of concrete",
-                         fontsize=c["font_size"])
         fig.tight_layout()
         path = _save(fig, "chart_concrete_rebar.png")
         plt.close(fig)
@@ -217,4 +223,5 @@ def quantity_charts_tex(input_dict):
                                    "fig:concrete-rebar"))
     if not out:
         return ""
-    return "\n\\vspace{1em}\n\\noindent\\textbf{Quantity charts}\n\n" + "\n\n".join(out) + "\n"
+    return ("\n\\vspace{1em}\n\\needspace{16\\baselineskip}\n\\noindent\\textbf{Quantity charts}\n\n"
+            + "\n\n".join(out) + "\n")
