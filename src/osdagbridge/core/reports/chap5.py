@@ -145,6 +145,8 @@ from osdagbridge.core.reports.report_utils import _tex, _render_value, get_girde
 
 if TYPE_CHECKING:
     pass
+from osdagbridge.core.reports.chart_utils import ur_chart_tex
+
 def ch5_design_checks(checks_data, bridge) -> str:
     """Chapter 5 — Design Checks.
 
@@ -1500,6 +1502,9 @@ End diaphragms at the supports transfer transverse loads to the bearings, restra
 """ + t522_content + r"""
 \end{longtable}
 \noindent\textit{Note: UR = Demand / Capacity. All values $\leq 1.0$ indicate passing checks. The governing check for each component is highlighted in the individual design check sections above.}
+
+""" + ur_chart_tex(t522_content) + r"""
+
 
 """
 

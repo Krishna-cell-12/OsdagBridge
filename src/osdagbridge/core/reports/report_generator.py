@@ -120,6 +120,7 @@ from osdagbridge.core.utils.common import (
 
 from osdagbridge.core.reports.report_utils import _tex
 from . import styles
+from . import chart_utils
 from .table_utils import postprocess_tables
 from .executive_summary import executive_summary
 from .chap1 import ch1_project_info
@@ -815,6 +816,7 @@ def generate_report(payload, request):
             # ── Write figure bytes into tmp_dir/images/ then free RAM immediately ──
             tmp_images = os.path.join(tmp_dir, 'images')
             os.makedirs(tmp_images, exist_ok=True)
+            chart_utils.set_output_dir(tmp_images)   # report charts are drawn here (auto-deleted)
             fig_paths = {}
             for attr, img_bytes in list(payload.figure_data.items()):
                 if img_bytes:
