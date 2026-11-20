@@ -54,6 +54,7 @@ from osdagbridge.core.utils.common import (
 )
 
 from osdagbridge.core.reports.report_utils import _tex, _render_value
+from osdagbridge.core.reports.table_utils import make_longtable
 
 def ch3_loads(input_dict):
     # Live load vehicle names mapping
@@ -119,12 +120,14 @@ def ch3_loads(input_dict):
 
     lanes = input_dict.get(KEY_WC_LD_LANE_TABLE_COUNT)
     braking_force_str = ""
+    braking_kn_val = "N/A"
     if lanes not in (None, ""):
         try:
             lanes_int = int(lanes)
             braking_force_t = IRC6_2017.cl_211_2_braking_force(lanes_int)
             braking_force_kN = braking_force_t * 9.81
             braking_force_str = f"{braking_force_kN:.2f} kN ({braking_force_t:.2f} tonnes)"
+            braking_kn_val = f"{braking_force_kN:.2f}"
         except Exception:
             braking_force_str = "N/A"
     else:
@@ -141,6 +144,72 @@ def ch3_loads(input_dict):
         fp_str = f"{fp_value} kN/m²"
     else:
         fp_str = "N/A"
+
+    # --- Table 3.3 / 3.4: vehicle loads and footway load are separate tables ------------
+    # Vehicle rows follow the vehicles ticked in Additional Inputs > Loading > Live Load.
+    impact_a = impact_aa = None
+    try:
+        impact_a = 1.0 + IRC6_2017.cl_208_2_impact_factor(float(span))
+    except Exception:
+        pass
+    try:
+        impact_aa = 1.0 + IRC6_2017.cl_208_3_impact_factor(float(span))
+    except Exception:
+        pass
+    _vehicle_defs = [
+        (KEY_LL_IRC_CLASS_A,      "Class A",             "A"),
+        (KEY_LL_IRC_70R_WHEELED,  "Class 70R (Wheeled)", "AA"),
+        (KEY_LL_IRC_70R_TRACKED,  "Class 70R (Tracked)", "AA"),
+        (KEY_LL_IRC_AA_WHEELED,   "Class AA (Wheeled)",  "AA"),
+        (KEY_LL_IRC_AA_TRACKED,   "Class AA (Tracked)",  "AA"),
+        (KEY_LL_IRC_CLASS_SV,     "Class SV",            None),
+        (KEY_LL_IRC_70R_BOGIE,    "Class 70R (Bogie)",   "AA"),
+        (KEY_LL_IRC_CLASS_FATIGUE, "Class Fatigue",      None),
+    ]
+    vehicle_rows = []
+    for _key, _name, _grp in _vehicle_defs:
+        if not input_dict.get(_key):
+            continue
+        if _grp == "A" and impact_a is not None:
+            vehicle_rows.append([_tex(_name), "Impact factor", f"{impact_a:.3f}", "---", "IRC 6 Cl. 208.2"])
+        elif _grp == "AA" and impact_aa is not None:
+            vehicle_rows.append([_tex(_name), "Impact factor", f"{impact_aa:.3f}", "---", "IRC 6 Cl. 208.3"])
+        else:
+            vehicle_rows.append([_tex(_name), "Impact factor", "N/A", "---", "---"])
+    if custom and isinstance(custom, list):
+        for c in custom:
+            _cname = c.get('name') if isinstance(c, dict) else c
+            if _cname:
+                vehicle_rows.append([_tex(str(_cname)), "Impact factor", "User-defined", "---", "---"])
+    if not vehicle_rows:
+        vehicle_rows.append(["None selected", "---", "---", "---", "---"])
+    vehicle_rows.append(["All vehicles", "Braking force", _tex(braking_kn_val), "kN", "IRC 6 Cl. 211.2"])
+    vehicle_rows.append(["All vehicles", "Centrifugal force", "N/A", "kN", "IRC 6"])
+    vehicle_table_tex = make_longtable(
+        r"|L{3.0cm}|L{3.8cm}|C{2.2cm}|C{1.6cm}|L{3.0cm}|",
+        ["Vehicle Class", "Parameter", "Value", "Unit", "Reference"],
+        vehicle_rows,
+        caption=r"Live Loads (LL) --- Vehicle Loads",
+    )
+
+    fp_cell, fp_ref = "N/A", "IRC 6 Cl. 206.1"
+    if str(fp_mode).strip().lower() in ("as per irc 6", "as per irc6", "automatic"):
+        try:
+            fp_cell = f"{IRC6_2017.cl_206_1_footway_load():.3f}"
+        except Exception:
+            pass
+    elif fp_value not in (None, ""):
+        fp_cell, fp_ref = str(fp_value), "User-defined"
+    footway_rows = [
+        ["Footway pressure mode", _tex(str(fp_mode) if str(fp_mode).strip() else "N/A"), "---", "---"],
+        ["Footway live load", _tex(fp_cell), r"kN/m\textsuperscript{2}", fp_ref],
+    ]
+    footway_table_tex = make_longtable(
+        r"|L{5.0cm}|C{3.0cm}|C{2.0cm}|L{3.6cm}|",
+        ["Parameter", "Value", "Unit", "Reference"],
+        footway_rows,
+        caption=r"Live Loads (LL) --- Footway Load",
+    )
 
     # Vz / Pz — prefer stored computed values; fall back to IRC6 Table 12
     vz_val = input_dict.get(KEY_WL_HOURLY_MEAN_WIND)
@@ -162,6 +231,12 @@ def ch3_loads(input_dict):
             pass
     vz_str = f"{float(vz_val):.2f} m/s" if vz_val not in (None, "") else "N/A"
     pz_str = f"{float(pz_val):.2f} N/m²" if pz_val not in (None, "") else "N/A"
+    # LaTeX-safe versions used in Table 3.5 when the stored value is empty
+    vz_cell = f"{float(vz_val):.2f} m/s" if vz_val not in (None, "") else "N/A"
+    pz_cell = (f"{float(pz_val):.2f} N/m\\textsuperscript{{2}}") if pz_val not in (None, "") else "N/A"
+
+    def _or(primary, fallback):
+        return primary if str(primary).strip() else fallback
 
     # Table 3.5 — Seismic: prefer stored computed values; fall back to IRC6 cl_218_5_1
     sl_zone_factor = input_dict.get(KEY_SL_ZONE_FACTOR)
@@ -300,20 +375,10 @@ This section summarizes all loads applied to the bridge and the load combination
 \end{longtable}
 
 \vspace{1em}
-\begin{longtable}{|L{5.5cm}|p{10.0cm}|}
-\caption{\textbf{Live Loads (LL)}}
-\hline
-\textbf{parameter} & \textbf{value} \\
-\hline
-\textnormal{Vehicles Considered} & """ + _tex(vehicles_str) + r""" \\[6pt]
-\hline
-\textnormal{Impact Factor (IRC 6)} & """ + _tex(impact_factor_str) + r""" \\[6pt]
-\hline
-\textnormal{Braking Load (IRC 6)} & """ + _tex(braking_force_str) + r""" \\[6pt]
-\hline
-\textnormal{Footpath Live Load (if applicable)} & """ + (_render_value(input_dict, KEY_LL_FOOTPATH_PRESSURE_VALUE, ' kN/m\\textsuperscript{2}')) + r""" \\[6pt]
-\hline
-\end{longtable}
+""" + vehicle_table_tex + r"""
+
+\vspace{1em}
+""" + footway_table_tex + r"""
 
 \vspace{1em}
 \begin{longtable}{|L{5.5cm}|p{10.0cm}|}
@@ -327,9 +392,9 @@ This section summarizes all loads applied to the bridge and the load combination
 \hline
 \textnormal{Average Exposed Height, H (m)} & """ + (_render_value(input_dict, KEY_WL_AVG_EXPOSED_HEIGHT, ' m')) + r""" \\[6pt]
 \hline
-\textnormal{Hourly Mean Wind Speed, Vz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_MEAN_WIND, ' m/s')) + r""" \\[6pt]
+\textnormal{Hourly Mean Wind Speed, Vz} & """ + _or(_render_value(input_dict, KEY_WL_HOURLY_MEAN_WIND, ' m/s'), vz_cell) + r""" \\[6pt]
 \hline
-\textnormal{Hourly Wind Pressure, Pz} & """ + (_render_value(input_dict, KEY_WL_HOURLY_WIND_PRESSURE, ' N/m\\textsuperscript{2}')) + r""" \\[6pt]
+\textnormal{Hourly Wind Pressure, Pz} & """ + _or(_render_value(input_dict, KEY_WL_HOURLY_WIND_PRESSURE, ' N/m\\textsuperscript{2}'), pz_cell) + r""" \\[6pt]
 \hline
 \textnormal{Transverse Wind Force} & """ + (_render_value(input_dict, KEY_WL_TRANSVERSE_WIND_FORCE, ' kN')) + r""" \\[6pt]
 \hline
